@@ -12,47 +12,36 @@ if 'data' not in st.session_state:
         'ステージ移動': [], 'レア役履歴': []
     }
 
-# モード確率計算関数
+# 画像の表に基づく確率データ（仮定値なし）
+ACTION_PROB = {
+    '汗ぬぐい': {'LOW': 60.0, 'MID': 13.3, 'HI': 11.1, 'SP': 11.1},
+    'リロード': {'LOW': 13.3, 'MID': 60.0, 'HI': 11.1, 'SP': 11.1},
+    '見回す': {'LOW': 13.3, 'MID': 13.3, 'HI': 60.0, 'SP': 11.1},
+    '銃回し': {'LOW': 13.3, 'MID': 13.3, 'HI': 11.1, 'SP': 54.2},
+    'ストレッチ': {'LOW': 0, 'MID': 0, 'HI': 6.7, 'SP': 12.5}
+}
+
+STAGE_TRANSITION_PROB = {
+    'LOW': {'集会場': 0, '大湿原': 86.67, '遺跡': 13.33, '始祖': 0},
+    'MID': {'集会場': 0, '大湿原': 80.0, '遺跡': 20.0, '始祖': 0},
+    'HI': {'集会場': 0, '大湿原': 20.0, '遺跡': 80.0, '始祖': 0},
+    'SP': {'集会場': 0, '大湿原': 6.67, '遺跡': 13.33, '始祖': 80.0}
+}
+
+# モード確率計算関数（画像の表に基づく）
 def calculate_mode_probabilities():
     prob = {'LOW': 25, 'MID': 25, 'HI': 25, 'SP': 25}
     
-    # セリフの影響
-    prob['MID'] += st.session_state['data']['ジョッシュ強'] * 5
-    prob['SP'] += st.session_state['data']['エクセラ強'] * 10
+    # クリスアクションの影響（累積）
+    for action, count in st.session_state['data']['クリスアクション'].items():
+        for mode in prob.keys():
+            prob[mode] += ACTION_PROB[action][mode] * count
     
-    # CZ後のステージ影響
-    if st.session_state['data']['CZ後ステージ'] == '集会場':
-        prob['LOW'] += 10
-    elif st.session_state['data']['CZ後ステージ'] == '大湿原':
-        prob['MID'] += 10
-    elif st.session_state['data']['CZ後ステージ'] == '遺跡':
-        prob['HI'] += 10
-    elif st.session_state['data']['CZ後ステージ'] == '始祖':
-        prob['SP'] = 100
-    
-    # クリスアクションの影響（累積判定）
-    prob['LOW'] += st.session_state['data']['クリスアクション']['汗ぬぐい'] * 3
-    prob['MID'] += st.session_state['data']['クリスアクション']['リロード'] * 3
-    prob['HI'] += st.session_state['data']['クリスアクション']['見回す'] * 3
-    prob['SP'] += st.session_state['data']['クリスアクション']['ストレッチ'] * 5
-    
-    # ステージ移動の影響（累積判定）
+    # ステージ移動の影響（累積）
     for move in st.session_state['data']['ステージ移動']:
-        if move == '集会場 → 大湿原':
-            prob['MID'] += 5
-        elif move == '大湿原 → 遺跡':
-            prob['HI'] += 5
-        elif move == '遺跡 → 始祖':
-            prob['SP'] = 100
-    
-    # レア役履歴の影響（累積判定）
-    for rare in st.session_state['data']['レア役履歴']:
-        if rare == '弱チェリー':
-            prob['MID'] += 3
-        elif rare == '強チェリー':
-            prob['HI'] += 6
-        elif rare == '単チェリー':
-            prob['SP'] += 10
+        for mode in prob.keys():
+            if move in STAGE_TRANSITION_PROB[mode]:
+                prob[mode] += STAGE_TRANSITION_PROB[mode][move]
     
     # 正規化
     total = sum(prob.values())
@@ -64,27 +53,19 @@ def calculate_mode_probabilities():
 # タイトル
 st.title('スマスロ バイオハザード5 モード判別ツール')
 
-# 入力フォーム
-st.subheader('クリスアクション（累積判定）')
+# クリスアクション入力
+st.subheader('クリスアクション（累積）')
 for action in st.session_state['data']['クリスアクション'].keys():
     if st.button(action):
         st.session_state['data']['クリスアクション'][action] += 1
     st.write(f"{action}: {st.session_state['data']['クリスアクション'][action]}")
 
-st.subheader('ステージ移動（累積判定）')
+# ステージ移動入力
+st.subheader('ステージ移動（累積）')
 new_stage_move = st.selectbox('ステージ間の移動を選択', ['', '集会場 → 大湿原', '大湿原 → 遺跡', '遺跡 → 始祖'])
 if new_stage_move and new_stage_move not in st.session_state['data']['ステージ移動']:
     st.session_state['data']['ステージ移動'].append(new_stage_move)
 st.write("ステージ移動履歴:", st.session_state['data']['ステージ移動'])
-
-st.subheader('レア役履歴（累積判定）')
-if st.button('弱チェリー'):
-    st.session_state['data']['レア役履歴'].append('弱チェリー')
-if st.button('強チェリー'):
-    st.session_state['data']['レア役履歴'].append('強チェリー')
-if st.button('単チェリー'):
-    st.session_state['data']['レア役履歴'].append('単チェリー')
-st.write("レア役履歴:", st.session_state['data']['レア役履歴'])
 
 # モード確率の表示
 st.subheader('現在のモード判別結果')
